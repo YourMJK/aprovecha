@@ -3,11 +3,13 @@ use std::path::PathBuf;
 use clap::Args;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use serde_json::Value;
-
+use crate::json;
 
 const ENCODED_RECIPE_FIELD_PATH: &str = "/pageProps/encodedRecipe";
 const SLUG_FIELD_PATH: &str = "/slug";
 
+
+// - CLI
 
 #[derive(Args)]
 pub struct Arguments {
@@ -28,7 +30,7 @@ pub struct Arguments {
 	file_paths: Vec<PathBuf>
 }
 
-pub fn run(args: Arguments) -> Result<(), String> {
+pub fn cli(args: Arguments) -> Result<(), String> {
 	// Create output directory if not exists
 	let output_dir = args.output;
 	let output_dir_exists = fs::metadata(&output_dir)
@@ -47,6 +49,8 @@ pub fn run(args: Arguments) -> Result<(), String> {
 	Ok(())
 }
 
+
+// - Decoding & Decryption
 
 fn file_to_file(input_file: &PathBuf, output_dir: &PathBuf, key: &str, overwrite: bool) -> Result<(), String> {
 	// Get "encodedRecipe" value and decode it using the key
@@ -75,10 +79,7 @@ fn file_to_file(input_file: &PathBuf, output_dir: &PathBuf, key: &str, overwrite
 
 pub fn file_to_encrypted_string(input_file: &PathBuf) -> Result<String, String> {
 	// Read input JSON
-	let input_json_string = fs::read_to_string(input_file)
-		.map_err(|e| format!("Could not read input file {}: {e}", input_file.display()))?;
-	let input_json: Value = serde_json::from_str(&input_json_string)
-		.map_err(|e| format!("Invalid JSON input: {e}"))?;
+	let input_json: Value = json::from_file(input_file)?;
 	
 	// Get "encodedRecipe" value (base64)
 	let base64_string = input_json

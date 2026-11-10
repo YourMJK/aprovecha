@@ -2,7 +2,14 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use clap::Args;
+use serde_json::Value;
+use crate::json;
 
+pub type FreqMap = HashMap<char, f64>;
+struct Entry { char: char, count: u64, freq: f64 }
+
+
+// - CLI
 
 #[derive(Args)]
 pub struct Arguments {
@@ -33,26 +40,9 @@ fn validate_frequency(frequency: &str) -> Result<f64, String> {
 	}
 }
 
-pub fn run(args: Arguments) -> Result<(), String> {
-	let mut occurrences: HashMap<char, u64> = HashMap::new();
-	let mut total: u64 = 0;
-	
-	// Count all characters in input files
-	for file_path in &args.file_paths {
-		total += count_character_occurrences(&file_path, &mut occurrences)?;
-	}
-	if total == 0 {
-		return Err("No characters in input".to_string());
-	}
-	
-	// Normalize number of occurrences against total number of characters and sort in descending order
-	struct Entry { char: char, count: u64, freq: f64 }
-	let mut frequencies: Vec<Entry> = occurrences.into_iter()
-		.map(|(char, count)| {
-			Entry { char, count, freq: count as f64 / total as f64 }
-		})
-		.collect();
-	frequencies.sort_by(|a, b| b.count.cmp(&a.count));
+pub fn cli(args: Arguments) -> Result<(), String> {
+	// Count frequencies from input files
+	let frequencies = sorted_frequency_entries(&args.file_paths)?;
 	
 	// Filter frequencies
 	let max_length = args.max_length.unwrap_or(usize::MAX);
@@ -66,7 +56,7 @@ pub fn run(args: Arguments) -> Result<(), String> {
 	let mut json_map = serde_json::Map::new();
 	frequencies_filtered.for_each(|entry| {
 		let key = entry.char.to_string();
-		let value = serde_json::json!(round_freq(entry.freq));
+		let value = serde_json::json!(round_frequency_value(entry.freq));
 		json_map.insert(key, value);
 	});
 	let json_string = serde_json::to_string_pretty(&json_map)
@@ -76,6 +66,55 @@ pub fn run(args: Arguments) -> Result<(), String> {
 	Ok(())
 }
 
+fn round_frequency_value(freq: f64) -> f64 {
+	if freq > 1.0 || freq <= 0.0 { return freq }
+	const BASE: f64 = 10.0;
+	
+	// Round to 3 orders of magnitude
+	let mut normalized = freq;
+	let mut factor = 1e2;
+	while normalized < 1.0 {
+		normalized *= BASE;
+		factor *= BASE;
+	}
+	
+	(freq * factor).round() / factor
+}
+
+
+// - Generate Map
+
+#[allow(unused)]
+pub fn generate_map(files: &[PathBuf]) -> Result<FreqMap, String> {
+	let frequencies = sorted_frequency_entries(&files)?;
+	let map: FreqMap = frequencies.into_iter()
+		.map(|entry| (entry.char, entry.freq))
+		.collect();
+	Ok(map)
+}
+
+fn sorted_frequency_entries(files: &[PathBuf]) -> Result<Vec<Entry>, String> {
+	let mut occurrences: HashMap<char, u64> = HashMap::new();
+	let mut total: u64 = 0;
+	
+	// Count all characters in input files
+	for file in files {
+		total += count_character_occurrences(file, &mut occurrences)?;
+	}
+	if total == 0 {
+		return Err("No characters in input".to_string());
+	}
+	
+	// Normalize number of occurrences against total number of characters and sort in descending order
+	let mut frequencies: Vec<Entry> = occurrences.into_iter()
+		.map(|(char, count)| {
+			Entry { char, count, freq: count as f64 / total as f64 }
+		})
+		.collect();
+	frequencies.sort_by(|a, b| b.count.cmp(&a.count));
+	
+	Ok(frequencies)
+}
 
 fn count_character_occurrences(file: &PathBuf, occurrences: &mut HashMap<char, u64>) -> Result<u64, String> {
 	// Read string from text file
@@ -93,17 +132,24 @@ fn count_character_occurrences(file: &PathBuf, occurrences: &mut HashMap<char, u
 }
 
 
-fn round_freq(freq: f64) -> f64 {
-	if freq > 1.0 || freq <= 0.0 { return freq }
-	const BASE: f64 = 10.0;
+// - Read Map
+
+pub fn read_freq_file(file: &PathBuf) -> Result<FreqMap, String> {
+	let json = json::from_file(file)?;
+	let Value::Object(json_map) = json else {
+		return Err("Root JSON must be a map".to_string());
+	};
 	
-	// Round to 3 orders of magnitude
-	let mut normalized = freq;
-	let mut factor = 1e2;
-	while normalized < 1.0 {
-		normalized *= BASE;
-		factor *= BASE;
+	let mut freq_map = FreqMap::with_capacity(json_map.len());
+	for (key, value) in json_map {
+		if key.chars().count() != 1 {
+			return Err("Keys must be a single character".to_string());
+		}
+		let char = key.chars().nth(0).unwrap();
+		let frequency = value.as_f64()
+			.ok_or("Value must be a string")?;
+		freq_map.insert(char, frequency);
 	}
 	
-	(freq * factor).round() / factor
+	Ok(freq_map)
 }

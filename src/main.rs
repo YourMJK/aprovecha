@@ -1,5 +1,6 @@
 mod decode;
 mod frequency;
+mod json;
 
 use std::process;
 use clap::{Parser, Subcommand};
@@ -24,8 +25,8 @@ enum Command {
 
 fn run(args: Arguments) -> Result<(), String> {
 	match args.command {
-		Command::Decode(args) => decode::run(args),
-		Command::Frequency(args) => frequency::run(args),
+		Command::Decode(args) => decode::cli(args),
+		Command::Frequency(args) => frequency::cli(args),
 	}
 }
 
