@@ -5,8 +5,21 @@ use serde_json::Value;
 pub fn from_file(file: &PathBuf) -> Result<Value, String> {
 	let string = fs::read_to_string(file)
 		.map_err(|e| format!("Could not read file {}: {e}", file.display()))?;
-	let json: Value = serde_json::from_str(&string)
-		.map_err(|e| format!("Invalid JSON input: {e}"))?;
-	
-	Ok(json)
+	from_string(&string)
+}
+
+pub fn from_string(string: &str) -> Result<Value, String> {
+	serde_json::from_str(string)
+		.map_err(|e| format!("Invalid JSON: {e}"))
+}
+
+pub fn get_str_value<'a>(json: &'a Value, path: &str) -> Result<&'a str, String> {
+	json.pointer(path)
+		.and_then(Value::as_str)
+		.ok_or_else(|| format!("Missing string field {path}"))
+}
+pub fn get_array_value<'a>(json: &'a Value, path: &str) -> Result<&'a Vec<Value>, String> {
+	json.pointer(path)
+		.and_then(Value::as_array)
+		.ok_or_else(|| format!("Missing array field {path}"))
 }

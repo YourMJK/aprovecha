@@ -58,12 +58,9 @@ fn file_to_file(input_file: &PathBuf, output_dir: &PathBuf, key: &str, overwrite
 	let output_json_string = encrypted_string_to_json_string(&encrypted_string, key)?;
 	
 	// Verify decoded string is valid JSON and get slug name
-	let output_json: Value = serde_json::from_str(&output_json_string)
-		.map_err(|e| format!("Output is not valid JSON (wrong key?): {e}"))?;
-	let name = output_json
-		.pointer(SLUG_FIELD_PATH)
-		.and_then(Value::as_str)
-		.ok_or(format!("Missing string field {SLUG_FIELD_PATH}"))?;
+	let output_json: Value = json::from_string(&output_json_string)
+		.map_err(|_| "Output is not valid JSON (wrong key?)")?;
+	let name = json::get_str_value(&output_json, SLUG_FIELD_PATH)?;
 	
 	// Check if output file exists
 	let output_file = output_dir.join(name).with_added_extension("json");
@@ -82,10 +79,7 @@ pub fn file_to_encrypted_string(input_file: &PathBuf) -> Result<String, String> 
 	let input_json: Value = json::from_file(input_file)?;
 	
 	// Get "encodedRecipe" value (base64)
-	let base64_string = input_json
-		.pointer(ENCODED_RECIPE_FIELD_PATH)
-		.and_then(Value::as_str)
-		.ok_or(format!("Missing string field {ENCODED_RECIPE_FIELD_PATH}"))?;
+	let base64_string = json::get_str_value(&input_json, ENCODED_RECIPE_FIELD_PATH)?;
 	
 	// Decode base64 string
 	let encrypted_bytes = STANDARD
