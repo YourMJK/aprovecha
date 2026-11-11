@@ -14,7 +14,7 @@ const SLUG_FIELD_PATH: &str = "/slug";
 #[derive(Args)]
 pub struct Arguments {
 	/// The output directory path
-	#[arg(short, long, value_name = "DIRECTORY")]
+	#[arg(short, long = "out", value_name = "DIRECTORY")]
 	output: PathBuf,
 	
 	/// The repeated key for the XOR cipher (usually 24 characters long)
@@ -26,8 +26,8 @@ pub struct Arguments {
 	force: bool,
 	
 	/// The input JSON files to decode
-	#[arg(value_name = "FILE")]
-	file_paths: Vec<PathBuf>
+	#[arg(value_name = "RECIPE FILE")]
+	files: Vec<PathBuf>
 }
 
 pub fn cli(args: Arguments) -> Result<(), String> {
@@ -37,11 +37,11 @@ pub fn cli(args: Arguments) -> Result<(), String> {
 		.is_ok_and(|m| m.is_dir());
 	if !output_dir_exists {
 		fs::create_dir_all(&output_dir)
-			.map_err(|e| format!("Could not create output directory: {}", e))?;
+			.map_err(|e| format!("Could not create output directory: {e}"))?;
 	}
 	
 	// Handle each input file
-	for input_file in args.file_paths {
+	for input_file in args.files {
 		println!("> {}", input_file.display());
 		file_to_file(&input_file, &output_dir, &args.key, args.force)?
 	}

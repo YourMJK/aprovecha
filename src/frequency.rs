@@ -27,7 +27,7 @@ pub struct Arguments {
 	
 	/// The input text files from which to calculate the character frequencies
 	#[arg(value_name = "FILE")]
-	file_paths: Vec<PathBuf>
+	files: Vec<PathBuf>
 }
 
 fn validate_frequency(frequency: &str) -> Result<f64, String> {
@@ -42,7 +42,7 @@ fn validate_frequency(frequency: &str) -> Result<f64, String> {
 
 pub fn cli(args: Arguments) -> Result<(), String> {
 	// Count frequencies from input files
-	let frequencies = sorted_frequency_entries(&args.file_paths)?;
+	let frequencies = sorted_frequency_entries(&args.files)?;
 	
 	// Filter frequencies
 	let max_length = args.max_length.unwrap_or(usize::MAX);
@@ -134,7 +134,7 @@ fn count_character_occurrences(file: &PathBuf, occurrences: &mut HashMap<char, u
 
 // - Read Map
 
-pub fn read_freq_file(file: &PathBuf) -> Result<FreqMap, String> {
+pub fn read_map_file(file: &PathBuf) -> Result<FreqMap, String> {
 	let json = json::from_file(file)?;
 	let Value::Object(json_map) = json else {
 		return Err("Root JSON must be a map".to_string());

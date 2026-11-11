@@ -14,17 +14,17 @@ Full usage:
 ```
 Extract the encryption key from a JSON recipe file through statistical analysis
 
-Usage: aprovecha key [OPTIONS] --freq-file <FILE> <FILE>
+Usage: aprovecha key [OPTIONS] --freq-map <FILE> <RECIPE FILE>
 
 Arguments:
-  <FILE>  The input JSON file from which to extract the key
+  <RECIPE FILE>  The input JSON file from which to extract the key
 
 Options:
-      --freq-file <FILE>  A JSON file containing absolute frequencies of the most common characters
-  -l, --length <n>        Specify the number of characters in the key (if known). Otherwise, period of input will be analyzed to determine key length
-      --max-length <n>    Check key lengths from 1 up to n. Try increasing this number if no key could be found [default: 32]
-      --no-check          Do not check if the found key actual produces valid JSON when applied to the input file
-  -h, --help              Print help
+      --freq-map <FILE>  A JSON file containing absolute frequencies of the most common characters
+  -l, --length <n>       Specify the number of characters in the key (if known). Otherwise, period of input will be analyzed to determine key length
+      --max-length <n>   Check key lengths from 1 up to n. Try increasing this number if no key could be found [default: 32]
+      --no-check         Do not check if the found key actual produces valid JSON when applied to the input file
+  -h, --help             Print help
 ```
 
 ### 3. Decode recipe file using the key
@@ -35,14 +35,14 @@ Full usage:
 ```
 Decode a JSON recipe file using the encryption key
 
-Usage: aprovecha decode [OPTIONS] --output <DIRECTORY> --key <KEY> [FILE]...
+Usage: aprovecha decode [OPTIONS] --out <DIRECTORY> --key <KEY> [RECIPE FILE]...
 
 Arguments:
-  [FILE]...  The input JSON files to decode
+  [RECIPE FILE]...  The input JSON files to decode
 
 Options:
-  -o, --output <DIRECTORY>  The output directory path
-  -k, --key <KEY>           The repeated key for the XOR cipher (usually 24 characters long)
-  -f, --force               Overwrite existing output files
-  -h, --help                Print help
+  -o, --out <DIRECTORY>  The output directory path
+  -k, --key <KEY>        The repeated key for the XOR cipher (usually 24 characters long)
+  -f, --force            Overwrite existing output files
+  -h, --help             Print help
 ```

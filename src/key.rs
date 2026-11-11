@@ -21,8 +21,8 @@ enum LengthHint {
 #[derive(Args)]
 pub struct Arguments {
 	/// A JSON file containing absolute frequencies of the most common characters
-	#[arg(long, value_name = "FILE")]
-	freq_file: PathBuf,
+	#[arg(long = "freq-map", value_name = "FILE")]
+	freq_map_file: PathBuf,
 	
 	/// Specify the number of characters in the key (if known). Otherwise, period of input will be analyzed to determine key length
 	#[arg(short, long, value_name = "n")]
@@ -37,16 +37,16 @@ pub struct Arguments {
 	no_check: bool,
 	
 	/// The input JSON file from which to extract the key
-	#[arg(value_name = "FILE")]
-	file_path: PathBuf
+	#[arg(value_name = "RECIPE FILE")]
+	input_file: PathBuf
 }
 
 pub fn cli(args: Arguments) -> Result<(), String> {
 	let length_hint = args.length.map_or(Max(args.max_length), Known);
 	
 	// Find key using given input file, frequency file and length hint
-	let freq_map = frequency::read_freq_file(&args.freq_file)?;
-	let encrypted_string = decode::file_to_encrypted_string(&args.file_path)?;
+	let freq_map = frequency::read_map_file(&args.freq_map_file)?;
+	let encrypted_string = decode::file_to_encrypted_string(&args.input_file)?;
 	let key = find_key(&encrypted_string, &freq_map, length_hint)?;
 	
 	// Check if key produces valid JSON
