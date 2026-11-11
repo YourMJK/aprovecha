@@ -1,3 +1,4 @@
+mod key;
 mod decode;
 mod frequency;
 mod json;
@@ -15,7 +16,10 @@ struct Arguments {
 
 #[derive(Subcommand)]
 enum Command {
-	/// Decode a JSON file containing the .pageProps.encodedRecipe field
+	/// Extract the encryption key from a JSON recipe file through statistical analysis
+	Key(key::Arguments),
+	
+	/// Decode a JSON recipe file using the encryption key
 	Decode(decode::Arguments),
 	
 	/// Analyze the character frequencies of known valid output files and return the result as a JSON dictionary
@@ -25,6 +29,7 @@ enum Command {
 
 fn run(args: Arguments) -> Result<(), String> {
 	match args.command {
+		Command::Key(args) => key::cli(args),
 		Command::Decode(args) => decode::cli(args),
 		Command::Frequency(args) => frequency::cli(args),
 	}
