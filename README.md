@@ -1,13 +1,32 @@
 # aprovecha – Make the most of Provecho
+
 Download and decode recipes from [provecho.co](https://www.provecho.co/platform) and creator sites like [breadbakebeyond.com](https://www.breadbakebeyond.com/@breadbakebeyond/site)!
 
 ## Usage
 
 ### 1. Download encoded JSON recipe files
-*TODO*
+
+Example: **`$ aprovecha download --username breadbakebeyond —-out recipes/`**
+
+Full usage:
+
+```
+Download JSON recipe files from provecho.co
+
+Usage: aprovecha download [OPTIONS] --username <USERNAME> --out <DIRECTORY>
+
+Options:
+  -b, --build-id <BUILD_ID>  The current Next.js build ID of the website (changes regularly). Will be scraped from main site if not specified
+  -u, --username <USERNAME>  The username (without leading @) from which to download the recipes
+  -i, --interval <ms>        How long to wait between each request (as to not upset the server) in milliseconds [default: 1000]
+  -f, --force                Overwrite existing output files
+  -o, --out <DIRECTORY>      The output directory path
+  -h, --help                 Print help
+```
 
 ### 2. Find encryption key using subcommand `key`
-Example: **`$ aprovecha key --freq-file eng.json my-recipe.json`**
+
+Example: **`$ aprovecha key --freq-file eng.json recipes/my-recipe.json`**
 
 Full usage:
 
@@ -28,7 +47,8 @@ Options:
 ```
 
 ### 3. Decode recipe file using the key
-Example: **`$ aprovecha decode --key "abcd" --output . my-recipe.json`**
+
+Example: **`$ aprovecha decode --key "abcd" --output decoded/ recipes/*`**
 
 Full usage:
 

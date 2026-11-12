@@ -1,3 +1,4 @@
+mod download;
 mod key;
 mod decode;
 mod frequency;
@@ -17,6 +18,9 @@ struct Arguments {
 
 #[derive(Subcommand)]
 enum Command {
+	/// Download JSON recipe files from provecho.co
+	Download(download::Arguments),
+	
 	/// Extract the encryption key from a JSON recipe file through statistical analysis
 	Key(key::Arguments),
 	
@@ -30,6 +34,7 @@ enum Command {
 
 fn run(args: Arguments) -> Result<(), String> {
 	match args.command {
+		Command::Download(args) => download::cli(args),
 		Command::Key(args) => key::cli(args),
 		Command::Decode(args) => decode::cli(args),
 		Command::Frequency(args) => frequency::cli(args),

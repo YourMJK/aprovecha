@@ -2,6 +2,8 @@ use std::fs;
 use std::path::PathBuf;
 use serde_json::Value;
 
+pub const NEXT_DATA_BUILD_ID_POINTER: &str = "/buildId";
+pub const RECIPES_POINTER: &str = "/pageProps/recipes";
 pub const ENCODED_RECIPE_POINTER: &str = "/pageProps/encodedRecipe";
 pub const SLUG_POINTER: &str = "/slug";
 
