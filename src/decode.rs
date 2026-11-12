@@ -5,9 +5,6 @@ use base64::{engine::general_purpose::STANDARD, Engine as _};
 use serde_json::Value;
 use crate::json;
 
-const ENCODED_RECIPE_FIELD_PATH: &str = "/pageProps/encodedRecipe";
-const SLUG_FIELD_PATH: &str = "/slug";
-
 
 // - CLI
 
@@ -60,7 +57,7 @@ fn file_to_file(input_file: &PathBuf, output_dir: &PathBuf, key: &str, overwrite
 	// Verify decoded string is valid JSON and get slug name
 	let output_json: Value = json::from_string(&output_json_string)
 		.map_err(|_| "Output is not valid JSON (wrong key?)")?;
-	let name = json::get_str_value(&output_json, SLUG_FIELD_PATH)?;
+	let name = json::get_str_value(&output_json, json::SLUG_POINTER)?;
 	
 	// Check if output file exists
 	let output_file = output_dir.join(name).with_added_extension("json");
@@ -79,7 +76,7 @@ pub fn file_to_encrypted_string(input_file: &PathBuf) -> Result<String, String> 
 	let input_json: Value = json::from_file(input_file)?;
 	
 	// Get "encodedRecipe" value (base64)
-	let base64_string = json::get_str_value(&input_json, ENCODED_RECIPE_FIELD_PATH)?;
+	let base64_string = json::get_str_value(&input_json, json::ENCODED_RECIPE_POINTER)?;
 	
 	// Decode base64 string
 	let encrypted_bytes = STANDARD
