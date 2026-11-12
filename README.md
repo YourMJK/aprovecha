@@ -28,21 +28,21 @@ Options:
 ```
 
 ### 3. Decode recipe file using the key
-Example: **`$ aprovecha decode --output . --key "abcd" my-recipe.json`**
+Example: **`$ aprovecha decode --key "abcd" --output . my-recipe.json`**
 
 Full usage:
 
 ```
 Decode a JSON recipe file using the encryption key
 
-Usage: aprovecha decode [OPTIONS] --out <DIRECTORY> --key <KEY> [RECIPE FILE]...
+Usage: aprovecha decode [OPTIONS] --key <KEY> --out <DIRECTORY> [RECIPE FILE]...
 
 Arguments:
   [RECIPE FILE]...  The input JSON files to decode
 
 Options:
-  -o, --out <DIRECTORY>  The output directory path
   -k, --key <KEY>        The repeated key for the XOR cipher (usually 24 characters long)
   -f, --force            Overwrite existing output files
+  -o, --out <DIRECTORY>  The output directory path
   -h, --help             Print help
 ```

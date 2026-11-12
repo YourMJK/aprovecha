@@ -2,6 +2,7 @@ mod key;
 mod decode;
 mod frequency;
 mod json;
+mod files;
 
 use std::process;
 use clap::{Parser, Subcommand};

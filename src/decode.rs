@@ -3,17 +3,13 @@ use std::path::PathBuf;
 use clap::Args;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use serde_json::Value;
-use crate::json;
+use crate::{files, json};
 
 
 // - CLI
 
 #[derive(Args)]
 pub struct Arguments {
-	/// The output directory path
-	#[arg(short, long = "out", value_name = "DIRECTORY")]
-	output: PathBuf,
-	
 	/// The repeated key for the XOR cipher (usually 24 characters long)
 	#[arg(short, long)]
 	key: String,
@@ -22,6 +18,10 @@ pub struct Arguments {
 	#[arg(short, long)]
 	force: bool,
 	
+	/// The output directory path
+	#[arg(short, long = "out", value_name = "DIRECTORY")]
+	output_dir: PathBuf,
+	
 	/// The input JSON files to decode
 	#[arg(value_name = "RECIPE FILE")]
 	files: Vec<PathBuf>
@@ -29,18 +29,12 @@ pub struct Arguments {
 
 pub fn cli(args: Arguments) -> Result<(), String> {
 	// Create output directory if not exists
-	let output_dir = args.output;
-	let output_dir_exists = fs::metadata(&output_dir)
-		.is_ok_and(|m| m.is_dir());
-	if !output_dir_exists {
-		fs::create_dir_all(&output_dir)
-			.map_err(|e| format!("Could not create output directory: {e}"))?;
-	}
+	files::create_output_dir(&args.output_dir)?;
 	
 	// Handle each input file
 	for input_file in args.files {
 		println!("> {}", input_file.display());
-		file_to_file(&input_file, &output_dir, &args.key, args.force)?
+		file_to_file(&input_file, &args.output_dir, &args.key, args.force)?
 	}
 	
 	Ok(())
