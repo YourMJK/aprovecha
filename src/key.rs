@@ -20,9 +20,10 @@ enum LengthHint {
 
 #[derive(Args)]
 pub struct Arguments {
-	/// A JSON file containing absolute frequencies of the most common characters
+	/// A JSON file containing absolute frequencies (probabilities) of the most common characters (see subcommand `frequency`).
+	/// If not specified, the default table for English JSON output will be used
 	#[arg(long = "freq-map", value_name = "FILE")]
-	freq_map_file: PathBuf,
+	freq_map_file: Option<PathBuf>,
 	
 	/// Specify the number of characters in the key (if known). Otherwise, period of input will be analyzed to determine key length
 	#[arg(short, long, value_name = "n")]
@@ -46,12 +47,17 @@ pub struct Arguments {
 }
 
 pub fn cli(args: Arguments) -> Result<(), String> {
+	// Set up frequency map (use default if not specified) and length hint
+	let lin_freq_map = args.freq_map_file.map_or(
+		Ok(frequency::default_eng_json_map()),
+		|file| frequency::read_map_file(&file)
+	)?;
+	let log_freq_map = frequency::to_log(&lin_freq_map)?;
 	let length_hint = args.length.map_or(Max(args.max_length), Known);
 	
-	// Find key using given input file, frequency file and length hint
-	let freq_map = frequency::read_map_file(&args.freq_map_file)?;
+	// Find key using given input file, frequency map and length hint
 	let encrypted_string = decode::file_to_encrypted_string(&args.input_file)?;
-	let key = find_key(&encrypted_string, &freq_map, length_hint, args.debug)?;
+	let key = find_key(&encrypted_string, &log_freq_map, length_hint, args.debug)?;
 	
 	// Check if key produces valid JSON
 	if !args.no_check {
@@ -90,7 +96,7 @@ fn column(chars: &[char], width: usize, index: usize) -> impl Iterator<Item = ch
 
 // - Find Key
 
-fn find_key(encrypted_string: &str, freq_map: &frequency::FreqMap, length_hint: LengthHint, debug: bool) -> Result<String, String> {
+fn find_key(encrypted_string: &str, freq_map: &frequency::LogFreqMap, length_hint: LengthHint, debug: bool) -> Result<String, String> {
 	let chars: Vec<char> = encrypted_string.chars().collect();
 	
 	// Find key length
@@ -116,7 +122,7 @@ fn find_key(encrypted_string: &str, freq_map: &frequency::FreqMap, length_hint: 
 	Ok(key)
 }
 
-fn column_search(chars: &[char], freq_map: &frequency::FreqMap, length: usize, debug: bool) -> String {
+fn column_search(chars: &[char], freq_map: &frequency::LogFreqMap, length: usize, debug: bool) -> String {
 	columns(chars, length).enumerate()
 		.map(|(index, column)| {
 			// Calculate scores for each possible key character using cached column
@@ -224,31 +230,30 @@ fn find_period(chars: &[char], range: RangeInclusive<u8>) -> Result<u8, String> 
 // - Character Scoring
 
 /// Returns log2(P(all XORed chars are in output))
-fn total_log_probability_after_xor(chars: &[char], b: char, freq_map: &frequency::FreqMap) -> f64 {
+fn total_log_probability_after_xor(chars: &[char], b: char, freq_map: &frequency::LogFreqMap) -> f64 {
 	chars.iter()
 		.map(|a| {
 			let char = char::from_u32(*a as u32 ^ b as u32);
-			character_probability(char, freq_map)
-				.log2()
+			character_log_probability(char, freq_map)
 		})
 		.sum()
 }
 
-/// Returns P(char is in output) between 0.0 and 1.0
-fn character_probability(char: Option<char>, freq_map: &frequency::FreqMap) -> f64 {
+/// Returns log2(P(char is in output))
+fn character_log_probability(char: Option<char>, freq_map: &frequency::LogFreqMap) -> f64 {
 	let Some(char) = char else {
-		return 1e-8;
+		return -26.5754247591;  // log2(1e-8)
 	};
 	if let Some(freq) = freq_map.get(&char) {
 		*freq
 	} else if char.is_control() && !char.is_whitespace() {
-		1e-6
+		-19.9315685693  // log2(1e-6)
 	} else if PRINTABLE_ASCII.contains(&char) {
-		0.005
+		 -7.6438561898  // log2(0.005)
 	} else if char.is_alphanumeric() {
-		0.002
+		 -8.9657842847  // log2(0.002)
 	} else {
-		0.001
+		 -9.9657842847  // log2(0.001)
 	}
 }
 

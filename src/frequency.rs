@@ -5,8 +5,53 @@ use clap::Args;
 use serde_json::Value;
 use crate::json;
 
+pub type LogFreqMap = FreqMap;
 pub type FreqMap = HashMap<char, f64>;
 struct Entry { char: char, count: u64, freq: f64 }
+
+
+// - Default Map
+
+pub fn default_eng_json_map() -> FreqMap {
+	FreqMap::from([
+		('\"', 0.0792),
+		('e', 0.0610),
+		('t', 0.0491),
+		('i', 0.0443),
+		('a', 0.0387),
+		('o', 0.0374),
+		('d', 0.0373),
+		('n', 0.0328),
+		(' ', 0.0321),
+		('r', 0.0288),
+		('s', 0.0285),
+		('c', 0.0275),
+		(':', 0.0271),
+		('2', 0.0249),
+		(',', 0.0247),
+		('-', 0.0234),
+		('l', 0.0224),
+		('p', 0.0220),
+		('1', 0.0193),
+		('/', 0.0178),
+		('5', 0.0173),
+		('u', 0.0170),
+		('g', 0.0168),
+		('4', 0.0164),
+		('0', 0.0156),
+		('m', 0.0155),
+		('7', 0.0153),
+		('h', 0.0147),
+		('3', 0.0144),
+		('6', 0.0141),
+		('9', 0.0139),
+		('b', 0.0137),
+		('8', 0.0129),
+		('y', 0.0119),
+		('f', 0.0117),
+		('.', 0.0105),
+	])
+}
 
 
 // - CLI
@@ -152,4 +197,19 @@ pub fn read_map_file(file: &PathBuf) -> Result<FreqMap, String> {
 	}
 	
 	Ok(freq_map)
+}
+
+
+// - Logarithmic Values
+
+pub fn to_log(map: &FreqMap) -> Result<LogFreqMap, String> {
+	map.into_iter()
+		.map(|(key, value)| {
+			if 0.0 < *value && *value <= 1.0 {
+				Ok((*key, value.log2()))
+			} else {
+				Err(format!("Probability must be between 0 and 1: {value}"))
+			}
+		})
+		.collect::<Result<LogFreqMap, String>>()
 }
