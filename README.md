@@ -26,23 +26,25 @@ Options:
 
 ### 2. Find encryption key using subcommand `key`
 
-Example: **`$ aprovecha key --freq-file eng.json recipes/my-recipe.json`**
+Example: **`$ aprovecha key recipes/my-recipe.json`**
 
 Full usage:
 
 ```
 Extract the encryption key from a JSON recipe file through statistical analysis
 
-Usage: aprovecha key [OPTIONS] --freq-map <FILE> <RECIPE FILE>
+Usage: aprovecha key [OPTIONS] <RECIPE FILE>
 
 Arguments:
   <RECIPE FILE>  The input JSON file from which to extract the key
 
 Options:
-      --freq-map <FILE>  A JSON file containing absolute frequencies of the most common characters
+      --freq-map <FILE>  A JSON file containing absolute frequencies (probabilities) of the most common characters (see subcommand `frequency`).
+                         If not specified, the default table for English JSON output will be used
   -l, --length <n>       Specify the number of characters in the key (if known). Otherwise, period of input will be analyzed to determine key length
       --max-length <n>   Check key lengths from 1 up to n. Try increasing this number if no key could be found [default: 32]
       --no-check         Do not check if the found key actual produces valid JSON when applied to the input file
+      --debug            Print debug information such as confidence per found key character
   -h, --help             Print help
 ```
 
