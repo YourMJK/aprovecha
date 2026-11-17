@@ -36,6 +36,10 @@ pub struct Arguments {
 	#[arg(long)]
 	no_check: bool,
 	
+	/// Print debug information such as confidence per found key character
+	#[arg(long)]
+	debug: bool,
+	
 	/// The input JSON file from which to extract the key
 	#[arg(value_name = "RECIPE FILE")]
 	input_file: PathBuf
@@ -47,47 +51,146 @@ pub fn cli(args: Arguments) -> Result<(), String> {
 	// Find key using given input file, frequency file and length hint
 	let freq_map = frequency::read_map_file(&args.freq_map_file)?;
 	let encrypted_string = decode::file_to_encrypted_string(&args.input_file)?;
-	let key = find_key(&encrypted_string, &freq_map, length_hint)?;
+	let key = find_key(&encrypted_string, &freq_map, length_hint, args.debug)?;
 	
 	// Check if key produces valid JSON
 	if !args.no_check {
-		let decrypted_string = decode::encrypted_string_to_json_string(&encrypted_string, &key)
-			.map_err(|e| format!("Found key failed to decode input: {e}"))?;
-		let _: Value = serde_json::from_str(&decrypted_string)
-			.map_err(|e| format!("Found key does not produce valid JSON on input: {e}"))?;
+		check_key(&encrypted_string, &key)
+			.map_err(|e| format!(
+				"{e}\n\nTry a larger input file or specify a different frequency map if the language is not English.{}",
+				if !args.debug { "\nUse --debug for more information." } else { "" }
+			))?;
 	}
 	
 	// Output key
-	println!("{}", key);
+	println!("{key}");
 	
 	Ok(())
+}
+
+fn check_key(encrypted_string: &str, key: &str) -> Result<(), String> {
+	let decrypted_string = decode::encrypted_string_to_json_string(&encrypted_string, &key)
+		.map_err(|e| format!("Found key failed to decode input: {e}"))?;
+	let _: Value = serde_json::from_str(&decrypted_string)
+		.map_err(|e| format!("Found key does not produce valid JSON on input: {e}"))?;
+	Ok(())
+}
+
+
+// - Column Iterator
+
+fn columns(chars: &[char], width: usize) -> impl Iterator<Item = impl Iterator<Item = char>> {
+	(0..width).map(move |index| column(&chars, width, index))
+}
+
+fn column(chars: &[char], width: usize, index: usize) -> impl Iterator<Item = char> {
+	chars.iter().copied().skip(index).step_by(width)
 }
 
 
 // - Find Key
 
-fn find_key(encrypted_string: &str, freq_map: &frequency::FreqMap, length_hint: LengthHint) -> Result<String, String> {
+fn find_key(encrypted_string: &str, freq_map: &frequency::FreqMap, length_hint: LengthHint, debug: bool) -> Result<String, String> {
 	let chars: Vec<char> = encrypted_string.chars().collect();
 	
 	// Find key length
 	let length = match length_hint {
 		Known(length) => length,
 		Max(max_length) => find_period(&chars, MIN_LENGTH..=max_length)?,
-	};
+	} as usize;
 	
-	let key = columns(&chars, length as usize)
-		.map(|column| {
-			let column: Vec<char> = column.collect();
-			KEY_CHAR_RANGE
-				.map(|k| (k, total_character_score_after_xor(&column, k, &freq_map)))
-				.max_by(|a, b| a.1.total_cmp(&b.1))
-				.map(|(k, _)| k)
-				.unwrap()
-		})
-		.collect::<String>();
+	// Check whether input size is longer than key length, otherwise columns can be empty
+	let input_length = chars.len();
+	if debug {
+		eprintln!("Key length: {length}, input size: {input_length}");
+	}
+	if input_length < length {
+		return Err("Input has to be longer than key length".to_string());
+	}
+	if length == 0 {
+		return Err("Key cannot be empty".to_string());
+	}
 	
+	// Find key through column search
+	let key = column_search(&chars, freq_map, length, debug);
 	Ok(key)
 }
+
+fn column_search(chars: &[char], freq_map: &frequency::FreqMap, length: usize, debug: bool) -> String {
+	columns(chars, length).enumerate()
+		.map(|(index, column)| {
+			// Calculate scores for each possible key character using cached column
+			let column: Vec<char> = column.collect();
+			let weighted_chars = KEY_CHAR_RANGE
+				.map(|k| {
+					WeightedChar {
+						char: k,
+						score: total_log_probability_after_xor(&column, k, freq_map)
+					}
+				});
+			
+			// Select character with the highest score. Additionally collect and print info about confidence in debug mode
+			if debug {
+				let (char, confidence) = pick_best_with_confidence(weighted_chars);
+				eprintln!("Confidence for index {:02} ({char}):  {:.1} bits margin", index, confidence);
+				char
+			} else {
+				pick_best(weighted_chars)
+			}
+		})
+		.collect::<String>()
+}
+
+struct WeightedChar {
+	char: char,
+	score: f64,
+}
+fn pick_best(weighted_chars: impl Iterator<Item = WeightedChar>) -> char {
+	weighted_chars
+		.max_by(|a, b| a.score.total_cmp(&b.score))
+		.map(|w| w.char)
+		.unwrap()
+}
+fn pick_best_with_confidence(weighted_chars: impl Iterator<Item = WeightedChar>) -> (char, f64) {
+	let weighted_chars = weighted_chars.collect::<Vec<_>>();
+	
+	// Find best and second-best chars and their log scores
+	let mut best = &WeightedChar { char: '\0', score: f64::NEG_INFINITY };
+	let mut second = best;
+	for w in weighted_chars.iter() {
+		if w.score > best.score {
+			second = best;
+			best = &w;
+		} else if w.score > second.score {
+			second = &w;
+		}
+	}
+	
+	// Calculate rival mass R as total weight of rivals relative to winner:
+	// R = Σ_{i ≠ best} exp2(s_i) / exp2(s_best)
+	// = Σ_{i ≠ best} exp2(s_i − s_best)
+	// = Σ_{i ≠ best} (exp2(s_i − s_second) * exp2(s_second − s_best))
+	// = exp2(s_second − s_best) * Σ_{i ≠ best} exp2(s_i − s_second)
+	// = exp2(s_second − s_best) * tail
+	let tail: f64 = weighted_chars.iter()
+		.filter(|w| w.char != best.char)
+		.map(|w| (w.score - second.score).exp2())
+		.sum();
+	
+	// Calculate confidence as margin (in bits) between winner and combined rivals
+	// (i.e. rivals are 2^(-margin) as likely as winner):
+	// margin = -log2(R)
+	// = -log2(exp2(s_second − s_best) * tail)
+	// = -((s_second − s_best) + log2(tail))
+	// = (-s_second + s_best) - log2(tail)
+	// = s_best - s_second - log2(tail)
+	let margin = best.score - second.score - tail.log2();
+	
+	(best.char, margin)
+}
+
+
+// - Find Period
 
 fn find_period(chars: &[char], range: RangeInclusive<u8>) -> Result<u8, String> {
 	// Check whether input size is sufficient for search. If a column height is less than 2, its IOC will be NaN
@@ -99,7 +202,7 @@ fn find_period(chars: &[char], range: RangeInclusive<u8>) -> Result<u8, String> 
 	// Use average of each column's index of coincidence as a score for the period
 	let scores: HashMap<u8, f64> = range.into_iter()
 		.map(|length| {
-			let columns = columns(&chars, length as usize);
+			let columns = columns(chars, length as usize);
 			let score = average_index_of_coincidence(columns);
 			(length, score)
 		})
@@ -118,40 +221,39 @@ fn find_period(chars: &[char], range: RangeInclusive<u8>) -> Result<u8, String> 
 }
 
 
-// - Column Iterator
+// - Character Scoring
 
-fn columns(chars: &[char], width: usize) -> impl Iterator<Item = impl Iterator<Item = char>> {
-	(0..width).map(move |index| column(&chars, width, index))
+/// Returns log2(P(all XORed chars are in output))
+fn total_log_probability_after_xor(chars: &[char], b: char, freq_map: &frequency::FreqMap) -> f64 {
+	chars.iter()
+		.map(|a| {
+			let char = char::from_u32(*a as u32 ^ b as u32);
+			character_probability(char, freq_map)
+				.log2()
+		})
+		.sum()
 }
-fn column(chars: &[char], width: usize, index: usize) -> impl Iterator<Item = char> {
-	chars[index..].iter().copied().step_by(width)
-}
 
-
-// - Scoring
-
-fn total_character_score_after_xor(chars: &[char], b: char, freq_map: &frequency::FreqMap) -> f64 {
-	let mut score = 0.0;
-	for a in chars {
-		let char = char::from_u32(*a as u32 ^ b as u32);
-		score += character_score(char, &freq_map);
-	}
-	score
-}
-fn character_score(char: Option<char>, freq_map: &frequency::FreqMap) -> f64 {
+/// Returns P(char is in output) between 0.0 and 1.0
+fn character_probability(char: Option<char>, freq_map: &frequency::FreqMap) -> f64 {
 	let Some(char) = char else {
-		return -1.0
+		return 1e-8;
 	};
 	if let Some(freq) = freq_map.get(&char) {
 		*freq
 	} else if char.is_control() && !char.is_whitespace() {
-		-1.0
-	} else if PRINTABLE_ASCII.contains(&char) || char.is_alphanumeric() {
+		1e-6
+	} else if PRINTABLE_ASCII.contains(&char) {
 		0.005
+	} else if char.is_alphanumeric() {
+		0.002
 	} else {
-		0.0
+		0.001
 	}
 }
+
+
+// - Period Scoring
 
 fn average_index_of_coincidence(columns: impl Iterator<Item = impl Iterator<Item = char>>) -> f64 {
 	let iocs = columns
