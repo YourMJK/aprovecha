@@ -13,8 +13,14 @@ const BASE_URL: &str = "https://www.provecho.co";
 const MAIN_PAGE_URL: &str = constcat::concat!(BASE_URL, "/platform");
 const NEXT_DATA_ID: &str = "__NEXT_DATA__";
 
-struct URLConfig { build_id: String, username: String }
-struct OutputConfig { dir: PathBuf, overwrite: bool }
+pub struct URLConfig {
+	pub build_id: String,
+	pub username: String
+}
+struct OutputConfig {
+	dir: PathBuf,
+	overwrite: bool
+}
 
 
 // - CLI
@@ -63,15 +69,15 @@ pub fn cli(args: Arguments) -> Result<(), String> {
 }
 
 
-fn unwrap_or_get_build_id(build_id: Option<String>) -> Result<String, String> {
+pub fn unwrap_or_get_build_id(build_id: Option<String>) -> Result<String, String> {
 	if let Some(build_id) = build_id {
 		return Ok(build_id);
 	}
-	println!("No build ID specified, scraping current value from main site ...");
+	eprintln!("No build ID specified, scraping current value from main site ...");
 	
 	let build_id = get_build_id()
 		.map_err(|e| format!("Failed to get build ID: {e}"))?;
-	println!("Build ID: {build_id}");
+	eprintln!("Build ID: {build_id}");
 	
 	Ok(build_id)
 }
@@ -108,7 +114,7 @@ fn save_recipe(url_config: &URLConfig, output_config: &OutputConfig, slug: &str)
 
 // - Provecho Requests
 
-fn get_all_recipe_slugs(config: &URLConfig) -> Result<Vec<String>, String> {
+pub fn get_all_recipe_slugs(config: &URLConfig) -> Result<Vec<String>, String> {
 	// Get recipes.json
 	let json_string = get_user_data(config, "recipes.json")?;
 	let json = json::from_string(&json_string)?;

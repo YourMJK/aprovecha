@@ -1,3 +1,4 @@
+mod list;
 mod download;
 mod key;
 mod decode;
@@ -18,6 +19,9 @@ struct Arguments {
 
 #[derive(Subcommand)]
 enum Command {
+	/// List available recipes from provecho.co
+	List(list::Arguments),
+	
 	/// Download JSON recipe files from provecho.co
 	Download(download::Arguments),
 	
@@ -34,6 +38,7 @@ enum Command {
 
 fn run(args: Arguments) -> Result<(), String> {
 	match args.command {
+		Command::List(args) => list::cli(args),
 		Command::Download(args) => download::cli(args),
 		Command::Key(args) => key::cli(args),
 		Command::Decode(args) => decode::cli(args),
