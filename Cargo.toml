@@ -1,6 +1,6 @@
 [package]
 name = "aprovecha"
-description = "A CLI tool for decoding Provecho recipes"
+description = "A CLI tool for downloading and decoding Provecho recipes"
 version = "0.3.0"
 edition = "2024"
 
@@ -9,5 +9,5 @@ base64 = "0.22"
 clap = { version = "4.6.7", features = ["derive"] }
 constcat = "0.6.1"
 html5ever = "0.40.1"
-minreq = { version = "3.0.0", features = ["native-tls"] }
+minreq = { version = "3.0.0", features = ["https-rustls-probe"] }
 serde_json = { version = "1", features = ["preserve_order"] }
