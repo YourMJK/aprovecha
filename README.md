@@ -13,7 +13,10 @@ Full usage:
 ```
 Download JSON recipe files from provecho.co
 
-Usage: aprovecha download [OPTIONS] --username <USERNAME> --out <DIRECTORY>
+Usage: aprovecha download [OPTIONS] --username <USERNAME> --out <DIRECTORY> [NAME]...
+
+Arguments:
+  [NAME]...  The (slug) names of the recipes to download. If none are provided, all available recipes will be downloaded
 
 Options:
   -b, --build-id <BUILD_ID>  The current Next.js build ID of the website (changes regularly). Will be scraped from main site if not specified
