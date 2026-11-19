@@ -1,8 +1,9 @@
 use std::cell::{Cell, RefCell};
-use std::fs;
+use std::collections::HashSet;
+use std::{fs, io};
 use std::path::PathBuf;
 use std::thread::sleep;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use clap::Args;
 use html5ever::tendril::StrTendril;
 use html5ever::tokenizer::{BufferQueue, TagKind, Token, TokenSink, TokenSinkResult, Tokenizer, TokenizerOpts};
@@ -45,7 +46,11 @@ pub struct Arguments {
 	
 	/// The output directory path
 	#[arg(short, long = "out", value_name = "DIRECTORY")]
-	output_dir: PathBuf
+	output_dir: PathBuf,
+	
+	/// The (slug) names of the recipes to download. If none are provided, all available recipes will be downloaded
+	#[arg(value_name = "NAME")]
+	slugs: Vec<String>
 }
 
 pub fn cli(args: Arguments) -> Result<(), String> {
@@ -57,15 +62,38 @@ pub fn cli(args: Arguments) -> Result<(), String> {
 	let output_config = OutputConfig { dir: args.output_dir, overwrite: args.force };
 	let interval = Duration::from_millis(args.interval as u64);
 	
-	// Get list of all recipes
-	let slugs = get_all_recipe_slugs(&url_config)
+	// Get list of all available recipes
+	let mut slugs = get_all_recipe_slugs(&url_config)
 		.map_err(|e| format!("Failed to get recipe list: {e}"))?;
+	
+	// Check list of requested recipes against available recipes
+	if !args.slugs.is_empty() {
+		let available_slugs = slugs.iter().cloned().collect::<HashSet<_>>();
+		slugs.clear();
+		let mut invalid_slug = false;
+		
+		for slug in args.slugs {
+			if available_slugs.contains(&slug) {
+				slugs.push(slug);
+			} else {
+				eprintln!("No recipe named \"{slug}\" found");
+				invalid_slug = true;
+			}
+		}
+		
+		if invalid_slug {
+			eprintln!("Use the \"list\" subcommand for a list of available recipe names");
+			if !slugs.is_empty() { eprintln!(); }
+		}
+	}
 	
 	// Create output directory if not exists
 	files::create_output_dir(&output_config.dir)?;
 	
 	// Download all recipes in list
-	save_recipes(&url_config, &output_config, &slugs, interval)
+	save_recipes(&url_config, &output_config, &slugs, interval);
+	
+	Ok(())
 }
 
 
@@ -85,34 +113,65 @@ pub fn unwrap_or_get_build_id(build_id: Option<String>) -> Result<String, String
 
 // - Download
 
-fn save_recipes(url_config: &URLConfig, output_config: &OutputConfig, slugs: &[String], interval: Duration) -> Result<(), String> {
-	for slug in slugs {
-		println!("> {}", slug);
-		save_recipe(url_config, output_config, slug)?;
-		sleep(interval);
-	}
-	Ok(())
+enum DownloadError {
+	OutputFileAlreadyExists(PathBuf),
+	RequestFailed(String),
+	OutputFileWriteFailed(PathBuf, io::Error),
 }
 
-fn save_recipe(url_config: &URLConfig, output_config: &OutputConfig, slug: &str) -> Result<(), String> {
+fn save_recipes(url_config: &URLConfig, output_config: &OutputConfig, slugs: &[String], interval: Duration) {
+	for slug in slugs {
+		// Try downloading recipe
+		eprint!("> {} ", slug);
+		let start = Instant::now();
+		let result = save_recipe(url_config, output_config, slug);
+		
+		// Handle result
+		match result {
+			Ok(_) => eprintln!("✓"),
+			Err(e) => {
+				eprint!("✗  ---  ");
+				match e {
+					DownloadError::OutputFileAlreadyExists(_path) => {
+						eprintln!("Skipped, output file already exists");
+						continue; // Skip delay
+					}
+					DownloadError::RequestFailed(reason) => eprintln!("{reason}"),
+					DownloadError::OutputFileWriteFailed(path, e) => {
+						eprintln!("Could not write output file {}: {e}", path.display());
+					}
+				}
+			}
+		}
+		
+		// Wait for next interval
+		let delay = interval.saturating_sub(start.elapsed());
+		if !delay.is_zero() {
+			sleep(delay);
+		}
+	}
+}
+
+fn save_recipe(url_config: &URLConfig, output_config: &OutputConfig, slug: &str) -> Result<(), DownloadError> {
 	let filename = format!("{slug}.json");
 	
 	// Check if output file exists
 	let output_file = output_config.dir.join(&filename);
 	if !output_config.overwrite && output_file.exists() {
-		return Err(format!("Output file {} already exists", output_file.display()));
+		return Err(DownloadError::OutputFileAlreadyExists(output_file));
 	}
 	
 	// Get file contents
-	let contents = get_user_data(url_config, &filename)?;
+	let contents = get_user_data(url_config, &filename)
+		.map_err(|e| DownloadError::RequestFailed(e))?;
 	
 	// Write output file
 	fs::write(&output_file, contents)
-		.map_err(|e| format!("Could not write output file {}: {e}", output_file.display()))
+		.map_err(|e| DownloadError::OutputFileWriteFailed(output_file.clone(), e))
 }
 
 
-// - Provecho Requests
+// - Provecho.co Requests
 
 pub fn get_all_recipe_slugs(config: &URLConfig) -> Result<Vec<String>, String> {
 	// Get recipes.json
