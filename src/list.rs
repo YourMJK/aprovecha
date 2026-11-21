@@ -6,8 +6,9 @@ use crate::download;
 
 #[derive(Args)]
 pub struct Arguments {
-	/// The current Next.js build ID of the website (changes regularly). Will be scraped from main site if not specified
-	#[arg(short, long)]
+	/// The current Next.js build ID of the website (changes regularly).
+	/// Will be scraped from main site if not specified
+	#[arg(short, long, verbatim_doc_comment)]
 	build_id: Option<String>,
 	
 	/// The username (without leading @) from which to download the recipes
@@ -18,8 +19,6 @@ pub struct Arguments {
 pub fn cli(args: Arguments) -> Result<(), String> {
 	// Get build ID and configure URL template
 	let build_id = download::unwrap_or_get_build_id(args.build_id)?;
-	
-	// Configuration
 	let url_config = download::URLConfig { build_id, username: args.username };
 	
 	// Get list of all recipes

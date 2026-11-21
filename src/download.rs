@@ -8,7 +8,8 @@ use clap::Args;
 use html5ever::tendril::StrTendril;
 use html5ever::tokenizer::{BufferQueue, TagKind, Token, TokenSink, TokenSinkResult, Tokenizer, TokenizerOpts};
 use html5ever::tokenizer::states::RawKind;
-use crate::{files, json};
+use crate::{files, json, utils};
+use crate::utils::OutputConfig;
 
 const BASE_URL: &str = "https://www.provecho.co";
 const MAIN_PAGE_URL: &str = constcat::concat!(BASE_URL, "/platform");
@@ -18,9 +19,8 @@ pub struct URLConfig {
 	pub build_id: String,
 	pub username: String
 }
-struct OutputConfig {
-	dir: PathBuf,
-	overwrite: bool
+pub struct DownloadConfig {
+	pub interval: Duration
 }
 
 
@@ -28,39 +28,44 @@ struct OutputConfig {
 
 #[derive(Args)]
 pub struct Arguments {
-	/// The current Next.js build ID of the website (changes regularly). Will be scraped from main site if not specified
-	#[arg(short, long)]
+	#[command(flatten)]
+	url_options: URLOptions,
+	
+	#[command(flatten)]
+	download_options: DownloadOptions,
+	
+	#[command(flatten)]
+	output_config: OutputConfig,
+	
+	/// The (slug) names of the recipes to download.
+	/// If none are provided, all available recipes will be downloaded
+	#[arg(value_name = "NAME", verbatim_doc_comment)]
+	slugs: Vec<String>
+}
+
+#[derive(Args)]
+pub struct URLOptions {
+	/// The current Next.js build ID of the website (changes regularly).
+	/// Will be scraped from main site if not specified
+	#[arg(short, long, verbatim_doc_comment)]
 	build_id: Option<String>,
 	
 	/// The username (without leading @) from which to download the recipes
 	#[arg(short, long)]
 	username: String,
-	
+}
+
+#[derive(Args)]
+pub struct DownloadOptions {
 	/// How long to wait between each request (as to not upset the server) in milliseconds
 	#[arg(short, long, value_name = "ms", default_value_t = 1000)]
 	interval: u16,
-	
-	/// Overwrite existing output files
-	#[arg(short, long)]
-	force: bool,
-	
-	/// The output directory path
-	#[arg(short, long = "out", value_name = "DIRECTORY")]
-	output_dir: PathBuf,
-	
-	/// The (slug) names of the recipes to download. If none are provided, all available recipes will be downloaded
-	#[arg(value_name = "NAME")]
-	slugs: Vec<String>
 }
 
 pub fn cli(args: Arguments) -> Result<(), String> {
-	// Get build ID and configure URL template
-	let build_id = unwrap_or_get_build_id(args.build_id)?;
-	
-	// Configuration
-	let url_config = URLConfig { build_id, username: args.username };
-	let output_config = OutputConfig { dir: args.output_dir, overwrite: args.force };
-	let interval = Duration::from_millis(args.interval as u64);
+	// Get build ID & Prepare configuration
+	let (url_config, download_config) = get_config(args.url_options, args.download_options)?;
+	let output_config = args.output_config;
 	
 	// Get list of all available recipes
 	let mut slugs = get_all_recipe_slugs(&url_config)
@@ -91,11 +96,22 @@ pub fn cli(args: Arguments) -> Result<(), String> {
 	files::create_output_dir(&output_config.dir)?;
 	
 	// Download all recipes in list
-	save_recipes(&url_config, &output_config, &slugs, interval);
+	save_recipes(&url_config, &download_config, &output_config, &slugs);
 	
 	Ok(())
 }
 
+
+pub fn get_config(url_options: URLOptions, download_options: DownloadOptions) -> Result<(URLConfig, DownloadConfig), String> {
+	let url_config = URLConfig {
+		build_id: unwrap_or_get_build_id(url_options.build_id)?,
+		username: url_options.username
+	};
+	let download_config = DownloadConfig {
+		interval: Duration::from_millis(download_options.interval as u64)
+	};
+	Ok((url_config, download_config))
+}
 
 pub fn unwrap_or_get_build_id(build_id: Option<String>) -> Result<String, String> {
 	if let Some(build_id) = build_id {
@@ -119,40 +135,49 @@ enum DownloadError {
 	OutputFileWriteFailed(PathBuf, io::Error),
 }
 
-fn save_recipes(url_config: &URLConfig, output_config: &OutputConfig, slugs: &[String], interval: Duration) {
+pub fn save_recipes(url_config: &URLConfig, download_config: &DownloadConfig, output_config: &OutputConfig, slugs: &[String]) -> Vec<(PathBuf, bool)> {
+	let mut output_files: Vec<(PathBuf, bool)> = Vec::new();
+	
 	for slug in slugs {
 		// Try downloading recipe
-		eprint!("> {} ", slug);
+		utils::print_item(slug);
 		let start = Instant::now();
 		let result = save_recipe(url_config, output_config, slug);
 		
 		// Handle result
 		match result {
-			Ok(_) => eprintln!("✓"),
+			Ok(path) => {
+				utils::print_item_success();
+				output_files.push((path, true));
+			},
 			Err(e) => {
-				eprint!("✗  ---  ");
 				match e {
-					DownloadError::OutputFileAlreadyExists(_path) => {
-						eprintln!("Skipped, output file already exists");
+					DownloadError::OutputFileAlreadyExists(path) => {
+						utils::print_item_error("Skipped, output file already exists");
+						output_files.push((path, false));
 						continue; // Skip delay
 					}
-					DownloadError::RequestFailed(reason) => eprintln!("{reason}"),
+					DownloadError::RequestFailed(reason) => {
+						utils::print_item_error(&reason);
+					},
 					DownloadError::OutputFileWriteFailed(path, e) => {
-						eprintln!("Could not write output file {}: {e}", path.display());
+						utils::print_item_error(&format!("Could not write output file {}: {e}", path.display()));
 					}
 				}
 			}
 		}
 		
 		// Wait for next interval
-		let delay = interval.saturating_sub(start.elapsed());
+		let delay = download_config.interval.saturating_sub(start.elapsed());
 		if !delay.is_zero() {
 			sleep(delay);
 		}
 	}
+	
+	output_files
 }
 
-fn save_recipe(url_config: &URLConfig, output_config: &OutputConfig, slug: &str) -> Result<(), DownloadError> {
+fn save_recipe(url_config: &URLConfig, output_config: &OutputConfig, slug: &str) -> Result<PathBuf, DownloadError> {
 	let filename = format!("{slug}.json");
 	
 	// Check if output file exists
@@ -167,7 +192,9 @@ fn save_recipe(url_config: &URLConfig, output_config: &OutputConfig, slug: &str)
 	
 	// Write output file
 	fs::write(&output_file, contents)
-		.map_err(|e| DownloadError::OutputFileWriteFailed(output_file.clone(), e))
+		.map_err(|e| DownloadError::OutputFileWriteFailed(output_file.clone(), e))?;
+	
+	Ok(output_file)
 }
 
 

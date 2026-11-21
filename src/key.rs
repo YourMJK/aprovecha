@@ -4,9 +4,10 @@ use std::path::PathBuf;
 use clap::Args;
 use serde_json::Value;
 use crate::{decode, frequency};
-use crate::key::LengthHint::{Known, Max};
+use crate::key::LengthHint::*;
 
 const MIN_LENGTH: u8 = 2;
+const MAX_LENGTH_DEFAULT: u8 = 32;
 const PRINTABLE_ASCII: RangeInclusive<char> = ' '..='~';
 const KEY_CHAR_RANGE: RangeInclusive<char> = PRINTABLE_ASCII;
 
@@ -20,18 +21,8 @@ enum LengthHint {
 
 #[derive(Args)]
 pub struct Arguments {
-	/// A JSON file containing absolute frequencies (probabilities) of the most common characters (see subcommand `frequency`).
-	/// If not specified, the default table for English JSON output will be used
-	#[arg(long = "freq-map", value_name = "FILE")]
-	freq_map_file: Option<PathBuf>,
-	
-	/// Specify the number of characters in the key (if known). Otherwise, period of input will be analyzed to determine key length
-	#[arg(short, long, value_name = "n")]
-	length: Option<u8>,
-	
-	/// Check key lengths from 1 up to n. Try increasing this number if no key could be found
-	#[arg(long, value_name = "n", default_value_t = 32, value_parser = clap::value_parser!(u8).range(MIN_LENGTH as i64..=u8::MAX as i64))]
-	max_length: u8,
+	#[command(flatten)]
+	options: Options,
 	
 	/// Do not check if the found key actual produces valid JSON when applied to the input file
 	#[arg(long)]
@@ -46,32 +37,55 @@ pub struct Arguments {
 	input_file: PathBuf
 }
 
+#[derive(Args)]
+pub struct Options {
+	/// A JSON file containing absolute frequencies (probabilities) of the most common characters (see subcommand `frequency`).
+	/// If not specified, the default table for English JSON output will be used
+	#[arg(long = "freq-map", value_name = "FILE", verbatim_doc_comment)]
+	freq_map_file: Option<PathBuf>,
+	
+	/// Specify the number of characters in the key (if known). Otherwise, period of input will be analyzed to determine key length
+	#[arg(short, long, value_name = "n")]
+	length: Option<u8>,
+	
+	/// Check key lengths from 1 up to n. Try increasing this number if no key could be found
+	#[arg(long, value_name = "n", default_value_t = MAX_LENGTH_DEFAULT, value_parser = clap::value_parser!(u8).range(MIN_LENGTH as i64..=u8::MAX as i64))]
+	max_length: u8,
+}
+
 pub fn cli(args: Arguments) -> Result<(), String> {
-	// Set up frequency map (use default if not specified) and length hint
-	let lin_freq_map = args.freq_map_file.map_or(
-		Ok(frequency::default_eng_json_map()),
-		|file| frequency::read_map_file(&file)
-	)?;
-	let log_freq_map = frequency::to_log(&lin_freq_map)?;
-	let length_hint = args.length.map_or(Max(args.max_length), Known);
-	
-	// Find key using given input file, frequency map and length hint
-	let encrypted_string = decode::file_to_encrypted_string(&args.input_file)?;
-	let key = find_key(&encrypted_string, &log_freq_map, length_hint, args.debug)?;
-	
-	// Check if key produces valid JSON
-	if !args.no_check {
-		check_key(&encrypted_string, &key)
-			.map_err(|e| format!(
-				"{e}\n\nTry a larger input file or specify a different frequency map if the language is not English.{}",
-				if !args.debug { "\nUse --debug for more information." } else { "" }
-			))?;
-	}
+	let key = from_file(&args.input_file, &args.options, !args.no_check, args.debug)?;
 	
 	// Output key
 	println!("{key}");
 	
 	Ok(())
+}
+
+
+pub fn from_file(input_file: &PathBuf, options: &Options, check: bool, debug: bool) -> Result<String, String> {
+	// Set up frequency map (use default if not specified) and length hint
+	let lin_freq_map = options.freq_map_file.clone().map_or(
+		Ok(frequency::default_eng_json_map()),
+		|file| frequency::read_map_file(&file)
+	)?;
+	let log_freq_map = frequency::to_log(&lin_freq_map)?;
+	let length_hint = options.length.map_or(Max(options.max_length), Known);
+	
+	// Find key using given input file, frequency map and length hint
+	let encrypted_string = decode::file_to_encrypted_string(input_file)?;
+	let key = find_key(&encrypted_string, &log_freq_map, length_hint, debug)?;
+	
+	// Check if key produces valid JSON
+	if check {
+		check_key(&encrypted_string, &key)
+			.map_err(|e| format!(
+				"{e}\n\nTry a larger input file or specify a different frequency map if the language is not English.{}",
+				if !debug { "\nUse --debug for more information." } else { "" }
+			))?;
+	}
+	
+	Ok(key)
 }
 
 fn check_key(encrypted_string: &str, key: &str) -> Result<(), String> {

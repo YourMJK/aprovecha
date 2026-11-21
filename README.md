@@ -16,10 +16,12 @@ Download JSON recipe files from provecho.co
 Usage: aprovecha download [OPTIONS] --username <USERNAME> --out <DIRECTORY> [NAME]...
 
 Arguments:
-  [NAME]...  The (slug) names of the recipes to download. If none are provided, all available recipes will be downloaded
+  [NAME]...  The (slug) names of the recipes to download.
+             If none are provided, all available recipes will be downloaded
 
 Options:
-  -b, --build-id <BUILD_ID>  The current Next.js build ID of the website (changes regularly). Will be scraped from main site if not specified
+  -b, --build-id <BUILD_ID>  The current Next.js build ID of the website (changes regularly).
+                             Will be scraped from main site if not specified
   -u, --username <USERNAME>  The username (without leading @) from which to download the recipes
   -i, --interval <ms>        How long to wait between each request (as to not upset the server) in milliseconds [default: 1000]
   -f, --force                Overwrite existing output files
