@@ -1,3 +1,4 @@
+mod auto;
 mod list;
 mod download;
 mod key;
@@ -20,6 +21,9 @@ struct Arguments {
 
 #[derive(Subcommand)]
 enum Command {
+	/// All-in-one subcommand for automatically downloading and decoding all recipes of a given user
+	Auto(auto::Arguments),
+	
 	/// List available recipes from provecho.co
 	List(list::Arguments),
 	
@@ -39,6 +43,7 @@ enum Command {
 
 fn run(args: Arguments) -> Result<(), String> {
 	match args.command {
+		Command::Auto(args) => auto::cli(args),
 		Command::List(args) => list::cli(args),
 		Command::Download(args) => download::cli(args),
 		Command::Key(args) => key::cli(args),
